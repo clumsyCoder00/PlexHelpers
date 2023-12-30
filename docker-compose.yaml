@@ -120,6 +120,20 @@ services:
       - 9696:9696
     restart: unless-stopped
 
+  overseerr:
+    image: lscr.io/linuxserver/overseerr:latest
+    dns:
+    - 8.8.8.8
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - ./overseerr:/config
+    ports:
+      - 5055:5055
+    restart: unless-stopped
+
 # http://plexhelpers_flaresolverr_1:8191
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
