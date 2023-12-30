@@ -1,0 +1,131 @@
+version: "3"
+services:
+# https://hub.docker.com/r/qmcgaw/gluetun
+  vpn:
+    image: qmcgaw/gluetun
+    dns:
+    - 8.8.8.8
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 7000:7000 # this allows for access to the qbittorrent GUI through the VPN
+      # change this to match the port listed in gluetun folder
+      # **** PIA port forwarding config ****
+      # **** leave host at 50000 to keep qbittorrent config, just change vpn port (host:container) ****
+      # - 50000:${VPN_PORT}
+    volumes:
+      - ./vpn/config:/gluetun
+      - ./vpn/forwarded_port:/tmp/gluetun/forwarded_port
+    environment:
+      # See https://github.com/qdm12/gluetun/wiki
+      # https://serverlist.piaservers.net/vpninfo/servers/new
+      - VPN_SERVICE_PROVIDER=private internet access
+      - OPENVPN_USER=${VPN_USER}
+      - OPENVPN_PASSWORD=${VPN_PASS}
+      # **** available PIA server regions: CA Montreal, CA Vancouver, CA Toronto ****
+      - SERVER_REGIONS=CA Toronto
+      # **** use port forwarding if using PIA ****
+      # - PRIVATE_INTERNET_ACCESS_VPN_PORT_FORWARDING=on
+      # - PRIVATE_INTERNET_ACCESS_VPN_PORT_FORWARDING_STATUS_FILE=/tmp/gluetun/forwarded_port
+
+# set forwarded port to 50000
+  torrent:
+    image: linuxserver/qbittorrent
+    network_mode: service:vpn
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - WEBUI_PORT=7000
+    volumes:
+      - ./qbittorrent:/config
+      - ${TORRENT_PATH}/client:/downloads
+
+# https://github.com/Readarr/Readarr
+# https://github.com/linuxserver/docker-readarr
+  readarr:
+    image: lscr.io/linuxserver/readarr:nightly
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - ./readarr:/config
+      - ${TORRENT_PATH}:/shared
+    ports:
+      - 8787:8787
+    restart: unless-stopped
+
+# http://plexhelpers_radarr_1:7878
+# https://wiki.servarr.com/Radarr_Settings
+  radarr:
+    image: linuxserver/radarr
+    restart: unless-stopped
+    depends_on:
+      - torrent
+      - vpn
+    ports:
+      - 7878:7878
+    volumes:
+      - './radarr:/config'
+      # - be sure to map remote path via settings>download client>show advanced>show path mappings
+      - ${TORRENT_PATH}:/shared
+
+# http://plexhelpers_sonarr_1:8989
+  sonarr:
+    image: ghcr.io/linuxserver/sonarr
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - './sonarr:/config'
+      - ${TORRENT_PATH}:/sharedD
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+
+# http://plexhelpers_lidarr_1:8686
+# https://hub.docker.com/r/linuxserver/lidarr
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - ./lidarr:/config
+      - ${TORRENT_PATH}:/shared
+    ports:
+      - 8686:8686
+    restart: unless-stopped
+
+# http://plexhelpers_prowlarr_1:9696
+# https://github.com/Prowlarr/Prowlarr
+# https://hub.docker.com/r/linuxserver/prowlarr
+# U/N: admin P/W: adminadmin
+  prowlarr:
+    image: ghcr.io/linuxserver/prowlarr:develop
+    dns:
+    - 8.8.8.8
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+     - './prowlarr:/config'
+    ports:
+      - 9696:9696
+    restart: unless-stopped
+
+# http://plexhelpers_flaresolverr_1:8191
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_HTML=${LOG_HTML:-false}
+      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+      - TZ=${TZ}
+    restart: unless-stopped
